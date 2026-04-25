@@ -14,7 +14,129 @@ Based on original from reyandme/kam_remake ..\Utils\Server Poller\
 
 Example:
 ```json
-
+{
+	"RoomCount": 1,
+	"Rooms": [
+		{
+			"Server": {
+				"Name": "[RUS] maksvalmont (r16020)",
+				"IP": "37.139.84.48",
+				"Port": 56789,
+				"ServerType": "mstDedicated",
+				"OS": "Windows",
+				"Ping": 76
+			},
+			"GameRevision": 16020,
+			"RoomID": 1,
+			"OnlyRoom": false,
+			"GameInfo": {
+				"GameState": "mgsGame",
+				"PasswordLocked": false,
+				"PlayerCount": 8,
+				"GameOptions": {
+					"Peacetime": 60,
+					"SpeedPT": 1.3,
+					"SpeedAfterPT": 1,
+					"RandomSeed": 1508940013,
+					"MissionDifficulty": "mdNone"
+				},
+				"Players": [
+					{
+						"Name": "ORDAORKI",
+						"Color": "#FB8FDE",
+						"Connected": true,
+						"LangCode": "rus",
+						"Team": 1,
+						"IsSpectator": false,
+						"IsHost": true,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					},
+					{
+						"Name": "[E*] Progruz",
+						"Color": "#64CEFA",
+						"Connected": true,
+						"LangCode": "rus",
+						"Team": 2,
+						"IsSpectator": false,
+						"IsHost": false,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					},
+					{
+						"Name": "POLAKO",
+						"Color": "#004B13",
+						"Connected": true,
+						"LangCode": "pol",
+						"Team": 0,
+						"IsSpectator": true,
+						"IsHost": false,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					},
+					{
+						"Name": "Igor{ORKI}",
+						"Color": "#1B1B1B",
+						"Connected": true,
+						"LangCode": "rus",
+						"Team": 0,
+						"IsSpectator": true,
+						"IsHost": false,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					},
+					{
+						"Name": "Toxic_Ghoul",
+						"Color": "#FF07FF",
+						"Connected": true,
+						"LangCode": "rus",
+						"Team": 2,
+						"IsSpectator": false,
+						"IsHost": false,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					},
+					{
+						"Name": "Regus",
+						"Color": "#A2C50E",
+						"Connected": true,
+						"LangCode": "pol",
+						"Team": 0,
+						"IsSpectator": true,
+						"IsHost": false,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					},
+					{
+						"Name": "Das Boot",
+						"Color": "#EB0000",
+						"Connected": true,
+						"LangCode": "eng",
+						"Team": 0,
+						"IsSpectator": true,
+						"IsHost": false,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					},
+					{
+						"Name": "ooga booga-ORKI",
+						"Color": "#F86C07",
+						"Connected": true,
+						"LangCode": "slv",
+						"Team": 1,
+						"IsSpectator": false,
+						"IsHost": false,
+						"PlayerType": "nptHuman",
+						"WonOrLost": "wolNone"
+					}
+				],
+				"Description": "2x2 gogogo",
+				"Map": "CiW 2x2",
+				"GameTime": "00:46:44"
+			}
+		}
+	]
+}
 ```
 
 Build:

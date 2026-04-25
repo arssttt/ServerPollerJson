@@ -35,7 +35,7 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
 
           CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-          go build -ldflags="-s -w" -o dist/app-${{ matrix.goos }}-${{ matrix.goarch }}$EXT .
+          go build -ldflags="-s -w" -o dist/server-poller-json-${{ matrix.goos }}-${{ matrix.goarch }}$EXT .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
