@@ -25,7 +25,7 @@ import (
 const (
 	defaultMasterServer = "http://master.kamremake.com/"
 	protocolRevision    = "r16000"
-	gameRevision        = "r16020"
+	defaultGameRevision = "r16020"
 
 	maxQueries    = 16
 	maxLobbySlots = 14
@@ -96,7 +96,7 @@ type roomInfo struct {
 
 type outputPlayer struct {
 	Name        string `json:"Name"`
-	Color       uint32 `json:"Color"`
+	Color       string `json:"Color"`
 	Connected   bool   `json:"Connected"`
 	LangCode    string `json:"LangCode"`
 	Team        int32  `json:"Team"`
@@ -150,19 +150,21 @@ type outputJSON struct {
 func main() {
 	master := flag.String("master", defaultMasterServer, "KaM Remake master server URL")
 	timeout := flag.Duration("timeout", 6*time.Second, "total polling timeout")
+	gameRevision := flag.String("gameRevision", defaultGameRevision, "KaM Remake game revision")
+	includeEmptyRooms := flag.Bool("includeEmptyRooms", false, "include rooms without players")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	servers, err := fetchServerList(ctx, *master)
+	servers, err := fetchServerList(ctx, *master, *gameRevision)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	rooms := pollServers(ctx, servers, *timeout)
-	out := buildOutput(rooms)
+	out := buildOutput(rooms, *includeEmptyRooms)
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetEscapeHTML(false)
@@ -172,7 +174,7 @@ func main() {
 	}
 }
 
-func fetchServerList(ctx context.Context, master string) ([]serverInfo, error) {
+func fetchServerList(ctx context.Context, master string, gameRevision string) ([]serverInfo, error) {
 	base, err := url.Parse(master)
 	if err != nil {
 		return nil, err
@@ -504,14 +506,18 @@ func readGameOptions(r *streamReader) (gameOptions, error) {
 	return options, err
 }
 
-func buildOutput(rooms []roomInfo) outputJSON {
+func buildOutput(rooms []roomInfo, includeEmptyRooms bool) outputJSON {
 	out := outputJSON{Rooms: make([]outputRoom, 0, len(rooms))}
 	for _, room := range rooms {
+		if !includeEmptyRooms && room.GameInfo.PlayerCount == 0 {
+			continue
+		}
+
 		players := make([]outputPlayer, 0, len(room.GameInfo.Players))
 		for _, player := range room.GameInfo.Players {
 			players = append(players, outputPlayer{
 				Name:        player.Name,
-				Color:       player.Color,
+				Color:       formatPlayerColor(player.Color),
 				Connected:   player.Connected,
 				LangCode:    player.LangCode,
 				Team:        player.Team,
@@ -723,6 +729,13 @@ func formatGameTime(delphiDateTime float64) string {
 	m := (totalSeconds / 60) % 60
 	s := totalSeconds % 60
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+func formatPlayerColor(color uint32) string {
+	r := byte(color)
+	g := byte(color >> 8)
+	b := byte(color >> 16)
+	return fmt.Sprintf("#%02X%02X%02X", r, g, b)
 }
 
 func minDuration(a, b time.Duration) time.Duration {
