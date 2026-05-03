@@ -4,7 +4,7 @@ Based on original from reyandme/kam_remake ..\Utils\Server Poller\
 
 
 # Format JSON
-- root: `RoomCount`, `Rooms`
+- root: `RoomCount`, `Rooms`, `fromcache`, `error`
 - room: `Server`, `GameRevision`, `RoomID`, `OnlyRoom`, `GameInfo`
 - server: `Name`, `IP`, `Port`, `ServerType`, `OS`, `Ping`
 - game info: `GameState`, `PasswordLocked`, `PlayerCount`, `GameOptions`, `Players`, `Description`, `Map`, `GameTime`
@@ -159,3 +159,6 @@ Options:
 - `-serverCache`: server list cache file, default `servers-cache.json`
 - `-gameRevision`: game revision sent to master server as `coderev`, default `r16020`
 - `-includeEmptyRooms`: include rooms without players, default `false`
+
+Server cache is updated after a successful master server response, and after polling only when at least one live server responds.
+When the master server is unavailable but the cache is loaded successfully, stdout remains valid JSON: `fromcache` is `true` and `error` contains the master server request error.

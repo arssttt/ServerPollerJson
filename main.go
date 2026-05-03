@@ -155,6 +155,8 @@ type outputRoom struct {
 type outputJSON struct {
 	RoomCount int          `json:"RoomCount"`
 	Rooms     []outputRoom `json:"Rooms"`
+	FromCache bool         `json:"fromcache"`
+	Error     string       `json:"error"`
 }
 
 func main() {
@@ -166,21 +168,26 @@ func main() {
 	includeEmptyRooms := flag.Bool("includeEmptyRooms", false, "include rooms without players")
 	flag.Parse()
 
-	masterCtx, cancelMaster := context.WithTimeout(context.Background(), minDuration(*masterTimeout, *timeout))
+	masterRequestTimeout := minDuration(*masterTimeout, *timeout)
+	masterCtx, cancelMaster := context.WithTimeout(context.Background(), masterRequestTimeout)
 	servers, err := fetchServerList(masterCtx, *master, *gameRevision)
 	cancelMaster()
+	fromCache := false
+	outputError := ""
 	if err == nil && len(servers) == 0 {
 		err = errors.New("master server returned empty server list")
 	}
 	if err == nil {
 		if err := saveServerCache(*serverCachePath, servers); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to save server cache: %v\n", err)
+			outputError = appendOutputError(outputError, fmt.Sprintf("failed to save server cache: %v", err))
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "failed to fetch master server list: %v\n", err)
+		fromCache = true
+		outputError = formatMasterFetchError(err, masterRequestTimeout)
 		servers, err = loadServerCache(*serverCachePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to load server cache: %v\n", err)
+			out := buildOutput(nil, *includeEmptyRooms, fromCache, appendOutputError(outputError, fmt.Sprintf("failed to load server cache: %v", err)))
+			writeOutput(out)
 			os.Exit(1)
 		}
 	}
@@ -189,17 +196,36 @@ func main() {
 	defer cancel()
 
 	rooms, aliveServers := pollServers(ctx, servers, *timeout)
-	if err := saveServerCache(*serverCachePath, aliveServers); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to save live server cache: %v\n", err)
+	if len(aliveServers) > 0 {
+		if err := saveServerCache(*serverCachePath, aliveServers); err != nil {
+			outputError = appendOutputError(outputError, fmt.Sprintf("failed to save live server cache: %v", err))
+		}
 	}
-	out := buildOutput(rooms, *includeEmptyRooms)
+	out := buildOutput(rooms, *includeEmptyRooms, fromCache, outputError)
+	writeOutput(out)
+}
 
+func writeOutput(out outputJSON) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(out); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func appendOutputError(current string, next string) string {
+	if current == "" {
+		return next
+	}
+	return current + "; " + next
+}
+
+func formatMasterFetchError(err error, timeout time.Duration) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Sprintf("failed to fetch master server list: master server request timed out after %s: %v", timeout, err)
+	}
+	return fmt.Sprintf("failed to fetch master server list: %v", err)
 }
 
 func fetchServerList(ctx context.Context, master string, gameRevision string) ([]serverInfo, error) {
@@ -278,9 +304,14 @@ func loadServerCache(path string) ([]serverInfo, error) {
 }
 
 func saveServerCache(path string, servers []serverInfo) error {
+	servers = dedupeServers(servers)
+	if len(servers) == 0 {
+		return errors.New("refusing to save empty server cache")
+	}
+
 	cache := serverCache{
 		UpdatedAt: time.Now().UTC(),
-		Servers:   dedupeServers(servers),
+		Servers:   servers,
 	}
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
@@ -586,8 +617,12 @@ func readGameOptions(r *streamReader) (gameOptions, error) {
 	return options, err
 }
 
-func buildOutput(rooms []roomInfo, includeEmptyRooms bool) outputJSON {
-	out := outputJSON{Rooms: make([]outputRoom, 0, len(rooms))}
+func buildOutput(rooms []roomInfo, includeEmptyRooms bool, fromCache bool, outputError string) outputJSON {
+	out := outputJSON{
+		Rooms:     make([]outputRoom, 0, len(rooms)),
+		FromCache: fromCache,
+		Error:     outputError,
+	}
 	for _, room := range rooms {
 		if !includeEmptyRooms && room.GameInfo.PlayerCount == 0 {
 			continue
