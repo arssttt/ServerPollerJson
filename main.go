@@ -94,6 +94,16 @@ type roomInfo struct {
 	GameInfo     gameInfo
 }
 
+type serverCache struct {
+	UpdatedAt time.Time    `json:"updatedAt"`
+	Servers   []serverInfo `json:"servers"`
+}
+
+type pollResult struct {
+	server serverInfo
+	rooms  []roomInfo
+}
+
 type outputPlayer struct {
 	Name        string `json:"Name"`
 	Color       string `json:"Color"`
@@ -150,20 +160,38 @@ type outputJSON struct {
 func main() {
 	master := flag.String("master", defaultMasterServer, "KaM Remake master server URL")
 	timeout := flag.Duration("timeout", 6*time.Second, "total polling timeout")
+	masterTimeout := flag.Duration("masterTimeout", 2*time.Second, "master server request timeout")
+	serverCachePath := flag.String("serverCache", "servers-cache.json", "server list cache file")
 	gameRevision := flag.String("gameRevision", defaultGameRevision, "KaM Remake game revision")
 	includeEmptyRooms := flag.Bool("includeEmptyRooms", false, "include rooms without players")
 	flag.Parse()
 
+	masterCtx, cancelMaster := context.WithTimeout(context.Background(), minDuration(*masterTimeout, *timeout))
+	servers, err := fetchServerList(masterCtx, *master, *gameRevision)
+	cancelMaster()
+	if err == nil && len(servers) == 0 {
+		err = errors.New("master server returned empty server list")
+	}
+	if err == nil {
+		if err := saveServerCache(*serverCachePath, servers); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to save server cache: %v\n", err)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "failed to fetch master server list: %v\n", err)
+		servers, err = loadServerCache(*serverCachePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to load server cache: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	servers, err := fetchServerList(ctx, *master, *gameRevision)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	rooms, aliveServers := pollServers(ctx, servers, *timeout)
+	if err := saveServerCache(*serverCachePath, aliveServers); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to save live server cache: %v\n", err)
 	}
-
-	rooms := pollServers(ctx, servers, *timeout)
 	out := buildOutput(rooms, *includeEmptyRooms)
 
 	enc := json.NewEncoder(os.Stdout)
@@ -232,9 +260,59 @@ func fetchServerList(ctx context.Context, master string, gameRevision string) ([
 	return servers, nil
 }
 
-func pollServers(ctx context.Context, servers []serverInfo, timeout time.Duration) []roomInfo {
+func loadServerCache(path string) ([]serverInfo, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var cache serverCache
+	if err := json.NewDecoder(f).Decode(&cache); err != nil {
+		return nil, err
+	}
+	if len(cache.Servers) == 0 {
+		return nil, errors.New("server cache is empty")
+	}
+	return cache.Servers, nil
+}
+
+func saveServerCache(path string, servers []serverInfo) error {
+	cache := serverCache{
+		UpdatedAt: time.Now().UTC(),
+		Servers:   dedupeServers(servers),
+	}
+	data, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func dedupeServers(servers []serverInfo) []serverInfo {
+	seen := make(map[string]struct{}, len(servers))
+	out := make([]serverInfo, 0, len(servers))
+	for _, srv := range servers {
+		key := net.JoinHostPort(srv.IP, strconv.Itoa(srv.Port))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		srv.Ping = 0
+		out = append(out, srv)
+	}
+	return out
+}
+
+func pollServers(ctx context.Context, servers []serverInfo, timeout time.Duration) ([]roomInfo, []serverInfo) {
 	sem := make(chan struct{}, maxQueries)
-	results := make(chan []roomInfo, len(servers))
+	results := make(chan pollResult, len(servers))
 	var wg sync.WaitGroup
 
 pollLoop:
@@ -251,7 +329,7 @@ pollLoop:
 			defer func() { <-sem }()
 			rooms, err := queryServer(ctx, s, minDuration(5*time.Second, timeout))
 			if err == nil {
-				results <- rooms
+				results <- pollResult{server: s, rooms: rooms}
 			}
 		}(srv)
 	}
@@ -260,10 +338,12 @@ pollLoop:
 	close(results)
 
 	var rooms []roomInfo
-	for r := range results {
-		rooms = append(rooms, r...)
+	aliveServers := make([]serverInfo, 0, len(servers))
+	for result := range results {
+		rooms = append(rooms, result.rooms...)
+		aliveServers = append(aliveServers, result.server)
 	}
-	return rooms
+	return rooms, aliveServers
 }
 
 func queryServer(ctx context.Context, srv serverInfo, timeout time.Duration) ([]roomInfo, error) {

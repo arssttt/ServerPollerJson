@@ -148,12 +148,14 @@ go build
 Run:
 
 ```powershell
-.\ServerPollerJson.exe -timeout 6s -master http://master.kamremake.com/ -gameRevision r16020
+.\ServerPollerJson.exe -timeout 6s -masterTimeout 2s -master http://master.kamremake.com/ -gameRevision r16020
 ```
 
 Options:
 
 - `-master`: master server URL, default `http://master.kamremake.com/`
 - `-timeout`: total polling timeout, default `6s`
+- `-masterTimeout`: master server request timeout before falling back to cache, default `2s`
+- `-serverCache`: server list cache file, default `servers-cache.json`
 - `-gameRevision`: game revision sent to master server as `coderev`, default `r16020`
 - `-includeEmptyRooms`: include rooms without players, default `false`
